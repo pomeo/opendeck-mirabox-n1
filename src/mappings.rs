@@ -63,7 +63,7 @@ pub const TREASLIN_QUERY: DeviceQuery = DeviceQuery::new(65440, 1, TREASLIN_VID,
 pub const REDRAGON_SS551_QUERY: DeviceQuery =
     DeviceQuery::new(65440, 1, REDRAGON_VID, REDRAGON_SS551_PID);
 
-pub const QUERIES: [DeviceQuery; 11] = [
+pub const QUERIES: [DeviceQuery; 12] = [
     AKP03_QUERY,
     AKP03E_QUERY,
     AKP03R_QUERY,
