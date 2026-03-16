@@ -137,7 +137,7 @@ impl Kind {
             Self::Akp03Rrev2 => "Ajazz AKP03R (rev. 2)",
             Self::N3 => "Mirabox N3",
             Self::N3EN => "Mirabox N3EN",
-            Self::N3CN3 => "Mirabox N3CN (rev. 3.0)",
+            Self::N3CN3 => "Mirabox N3CN (rev. 3)",
             Self::SoomfonSE => "Soomfon Stream Controller SE",
             Self::MSDTWO => "Mars Gaming MSD-TWO",
             Self::TreasLinN3 => "TreasLin N3",
