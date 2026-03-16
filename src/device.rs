@@ -98,6 +98,23 @@ pub async fn handle_error(id: &String, err: MirajazzError) -> bool {
 }
 
 pub async fn connect(candidate: &CandidateDevice) -> Result<Device, MirajazzError> {
+    let firmware_version = Device::read_firmware_version(&candidate.dev).await;
+
+    let firmware_version = match firmware_version {
+        Ok(fw) => fw,
+        Err(e) => {
+            log::error!("Failed to read firmware version from {}", &candidate.id);
+
+            return Err(e);
+        }
+    };
+
+    log::info!(
+        "Connecting to {} with fw {}",
+        &candidate.id,
+        &firmware_version
+    );
+
     let result = Device::connect(
         &candidate.dev,
         candidate.kind.protocol_version(),
