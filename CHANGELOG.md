@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-17
+
+### 🚀 Features
+
+- *(device)* Add support for n3cn3 (#27)
+- *(device)* Read firmware version when connecting to device
+
+### 🐛 Bug Fixes
+
+- Set correct queries length
+- *(udev)* Hexadecimals must be lowercase
+
+### 💼 Other
+
+- *(deps)* Bump mirajazz to 0.11.2
+
+### ⚙️ Miscellaneous Tasks
+
+- Readme
+- Mappings wording
+- Remove `just prepare` from readme
+
 ## [0.7.5] - 2026-02-27
 
 ### 🚀 Features
