@@ -65,14 +65,6 @@ rustup target add x86_64-pc-windows-gnu
 rustup target add x86_64-unknown-linux-gnu
 ```
 
-### Preparing environment
-
-```sh
-$ just prepare
-```
-
-This will build docker image for macOS crosscompilation
-
 ### Building a release package
 
 ```sh
