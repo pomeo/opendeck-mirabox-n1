@@ -110,7 +110,7 @@ pub async fn connect(candidate: &CandidateDevice) -> Result<Device, MirajazzErro
     };
 
     log::info!(
-        "Connecting to {} with fw {}",
+        "Connecting to {} with fw {:?}",
         &candidate.id,
         &firmware_version
     );
