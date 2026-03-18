@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- *(windows)* Fix crash due to firmware version read panic
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove Dockerfile.macos-cross
+
 ## [0.8.0] - 2026-03-17
 
 ### 🚀 Features
