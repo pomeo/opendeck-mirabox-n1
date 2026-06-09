@@ -2,6 +2,7 @@ use data_url::DataUrl;
 use image::load_from_memory_with_format;
 use mirajazz::{device::Device, error::MirajazzError, state::DeviceStateUpdate};
 use openaction::{OUTBOUND_EVENT_MANAGER, SetImageEvent};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -17,7 +18,12 @@ pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
     let device = async || -> Result<Device, MirajazzError> {
         let device = connect(&candidate).await?;
 
+        // Initialize first (set_brightness triggers it), then switch the device into its image
+        // mode — doing it in this order keeps the init sequence from undoing the mode switch.
         device.set_brightness(50).await?;
+        if let Some(mode) = candidate.kind.mode() {
+            device.set_mode(mode).await?;
+        }
         device.clear_all_button_images().await?;
         device.flush().await?;
 
@@ -58,6 +64,7 @@ pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
 
     tokio::select! {
         _ = device_events_task(&candidate) => {},
+        _ = device_keepalive_task(&candidate.id, token.clone()) => {},
         _ = token.cancelled() => {}
     };
 
@@ -68,6 +75,30 @@ pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
     }
 
     log::info!("Device task finished for {:?}", candidate);
+}
+
+/// The N1 re-enumerates / drops off the bus if the host stops talking to it, so we send a
+/// periodic keep-alive ("CONNECT") ping to keep the connection stable.
+async fn device_keepalive_task(id: &String, token: CancellationToken) {
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+            _ = token.cancelled() => return,
+        }
+
+        let result = {
+            let guard = DEVICES.read().await;
+            match guard.get(id) {
+                Some(device) => device.keep_alive().await,
+                None => return,
+            }
+        };
+
+        if let Err(err) = result {
+            handle_error(id, err).await;
+            return;
+        }
+    }
 }
 
 /// Handles errors, returning true if should continue, returning false if an error is fatal
@@ -193,9 +224,27 @@ async fn device_events_task(candidate: &CandidateDevice) -> Result<(), MirajazzE
 
 /// Handles different combinations of "set image" event, including clearing the specific buttons and whole device
 pub async fn handle_set_image(device: &Device, evt: SetImageEvent) -> Result<(), MirajazzError> {
+    let kind = Kind::from_vid_pid(device.vid, device.pid).unwrap(); // Safe: device is already filtered
+
+    // Encoder ("knob"/button) images are drawn on the screen-strip segments, which live at device
+    // indices right after the keys. Keypad images use the position as-is.
+    let is_encoder = evt.controller.as_deref() == Some("Encoder");
+    let device_index = |position: u8| -> u8 {
+        if is_encoder {
+            KEY_COUNT as u8 + position
+        } else {
+            position
+        }
+    };
+    let format = if is_encoder {
+        kind.encoder_image_format()
+    } else {
+        kind.image_format()
+    };
+
     match (evt.position, evt.image) {
         (Some(position), Some(image)) => {
-            log::info!("Setting image for button {}", position);
+            log::info!("Setting image for {} {}", if is_encoder { "encoder" } else { "button" }, position);
 
             // OpenDeck sends image as a data url, so parse it using a library
             let url = DataUrl::process(image.as_str()).unwrap(); // Isn't expected to fail, so unwrap it is
@@ -211,18 +260,12 @@ pub async fn handle_set_image(device: &Device, evt: SetImageEvent) -> Result<(),
             let image = load_from_memory_with_format(body.as_slice(), image::ImageFormat::Jpeg)?;
 
             device
-                .set_button_image(
-                    position,
-                    Kind::from_vid_pid(device.vid, device.pid)
-                        .unwrap()
-                        .image_format(),
-                    image,
-                )
+                .set_button_image(device_index(position), format, image)
                 .await?;
             device.flush().await?;
         }
         (Some(position), None) => {
-            device.clear_button_image(position).await?;
+            device.clear_button_image(device_index(position)).await?;
             device.flush().await?;
         }
         (None, None) => {

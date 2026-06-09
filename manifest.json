@@ -1,12 +1,12 @@
 {
-  "Name": "Ajazz AKP03 / Mirabox N3",
-  "Description": "Device support plugin for Ajazz AKP03 (+variants)",
-  "Author": "Andrey Viktorov",
-  "Version": "0.8.1",
-  "PluginUUID": "st.lynx.plugins.opendeck-akp03",
-  "CodePathLin": "opendeck-akp03-linux",
-  "CodePathMac": "opendeck-akp03-mac",
-  "CodePathWin": "opendeck-akp03-win.exe",
+  "Name": "Mirabox N1",
+  "Description": "Device support plugin for Mirabox N1",
+  "Author": "Sergey Ovechkin",
+  "Version": "0.1.0",
+  "PluginUUID": "com.github.pomeo.opendeck-mirabox-n1",
+  "CodePathLin": "opendeck-mirabox-n1-linux",
+  "CodePathMac": "opendeck-mirabox-n1-mac",
+  "CodePathWin": "opendeck-mirabox-n1-win.exe",
   "Icon": "assets/icon",
   "Category": "Hardware",
   "OS": [
@@ -15,5 +15,5 @@
     { "Platform": "windows", "MinimumVersion": "10" }
   ],
   "Actions": [],
-  "DeviceNamespace": "n3"
+  "DeviceNamespace": "n1"
 }

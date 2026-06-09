@@ -1,8 +1,10 @@
 ![Plugin Icon](assets/icon.png)
 
-# OpenDeck Ajazz AKP03 / Mirabox N3 Plugin
+# OpenDeck Mirabox N1 Plugin
 
-An unofficial plugin for Mirabox N3-family devices
+An unofficial OpenDeck plugin for the Mirabox N1.
+
+Based on [opendeck-akp03](https://github.com/4ndv/opendeck-akp03) by Andrey Viktorov.
 
 ## OpenDeck version
 
@@ -10,67 +12,55 @@ Requires OpenDeck 2.5.0 or newer
 
 ## Supported devices
 
-- Ajazz AKP03 (0300:1001)
-- Ajazz AKP03E (0300:1002)
-- Ajazz AKP03R (0300:1003)
-- Ajazz AKP03E (rev. 2) (0300:3002)
-- Ajazz AKP03R (rev. 2) (0300:3003)
-- Mirabox N3 (6602:1002)
-- Mirabox N3 (rev. 3) (6603:1002)
-- Mirabox N3EN (6603:1003)
-- Soomfon Stream Controller SE (1500:3001)
-- Mars Gaming MSD-TWO (0B00:1001)
-- TreasLin N3 (5548:1001)
-- Redragon Skyrider SS-551 (0200:2000)
+- Mirabox N1 (6603:1000)
+
+The N1 has 15 LCD keys (5 rows × 3 columns, numpad-style), one knob and two extra buttons.
+In OpenDeck the knob and the two buttons are exposed as the encoder row (left to right:
+button A, button B, knob). The knob supports both rotation and press; the two buttons are
+press-only.
+
+## Notes on the N1
+
+- The device boots into its built-in numpad layer. The plugin sends a mode-switch command on
+  connect to put it into the "PC / stream-dock" mode where host images are displayed, and a
+  periodic keep-alive so it doesn't drop off the USB bus.
+- Key LCD resolution is 108×104, displayed upright (no rotation/mirroring).
 
 ## Platform support
 
-- Linux: Guaranteed, if stuff breaks - I'll probably catch it before public release
-- Mac: Best effort, no tests before release, things may break, but I probably have means to fix them
-- Windows: Zero effort, no tests before release, if stuff breaks - too bad, it's up to you to contribute fixes
+- Linux: developed and tested here
+- Mac / Windows: untested, best effort (build targets are wired up but unverified)
 
 ## Installation
 
-1. Download an archive from [releases](https://github.com/4ndv/opendeck-akp03/releases)
+1. Build the plugin (see below) or grab a release archive
 2. In OpenDeck: Plugins -> Install from file
-3. Download [udev rules](./40-opendeck-akp03.rules) and install them by copying into `/etc/udev/rules.d/` and running `sudo udevadm control --reload-rules`
-4. Unplug and plug again the device, restart OpenDeck
-
-## Adding new devices
-
-Read [this wiki page](https://github.com/4ndv/opendeck-akp03/wiki/Adding-support-for-new-devices) for more information.
+3. Linux: copy [udev rules](./40-opendeck-mirabox-n1.rules) into `/etc/udev/rules.d/` and run
+   `sudo udevadm control --reload-rules`
+4. Unplug and plug the device again, restart OpenDeck
 
 ## Building
 
 ### Prerequisites
 
-You'll need:
+- Rust 1.87+ with the `x86_64-unknown-linux-gnu` target
+- For cross builds: `x86_64-pc-windows-gnu` target, mingw-w64 gcc, Docker, and [just](https://just.systems)
 
-- A Linux OS of some sort
-- Rust 1.87 and up with `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` targets installed
-- gcc with Windows support
-- Docker
-- [just](https://just.systems)
-
-On Arch Linux:
+### Local debug build
 
 ```sh
-sudo pacman -S just mingw-w64-gcc mingw-w64-binutils
+cargo build
 ```
 
-Adding rust targets:
+### Release package
 
 ```sh
-rustup target add x86_64-pc-windows-gnu
-rustup target add x86_64-unknown-linux-gnu
-```
-
-### Building a release package
-
-```sh
-$ just package
+just package
 ```
 
 ## Acknowledgments
 
-This plugin is heavily based on work by contributors of [elgato-streamdeck](https://github.com/streamduck-org/elgato-streamdeck) crate
+Built on top of [mirajazz](https://github.com/4ndv/mirajazz) and the
+[opendeck-akp03](https://github.com/4ndv/opendeck-akp03) / opendeck-akp153 plugins by Andrey
+Viktorov, which are in turn based on work by contributors of the
+[elgato-streamdeck](https://github.com/streamduck-org/elgato-streamdeck) crate.
