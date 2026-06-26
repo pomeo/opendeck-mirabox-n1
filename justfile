@@ -1,5 +1,9 @@
 id := "com.github.pomeo.opendeck-mirabox-n1.sdPlugin"
 
+# Docker command used for the macOS cross-build. Override if docker needs sudo:
+#   just docker="sudo docker" package
+docker := "docker"
+
 release: bump package tag
 
 package: build-linux build-mac build-win collect zip
@@ -28,7 +32,7 @@ build-linux:
     cargo build --release --target x86_64-unknown-linux-gnu --target-dir target/plugin-linux
 
 build-mac:
-    docker run --rm -it -v $(pwd):/io -w /io ghcr.io/rust-cross/cargo-zigbuild:sha-eba2d7e cargo zigbuild --release --target universal2-apple-darwin --target-dir target/plugin-mac
+    {{docker}} run --rm -it -v $(pwd):/io -w /io ghcr.io/rust-cross/cargo-zigbuild:sha-eba2d7e cargo zigbuild --release --target universal2-apple-darwin --target-dir target/plugin-mac
 
 build-win:
     cargo build --release --target x86_64-pc-windows-gnu --target-dir target/plugin-win
