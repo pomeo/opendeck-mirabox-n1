@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-06-26
+
+- Automatically recover the device after the host resumes from suspend: the N1 is fully
+  reconnected (mode switch, fresh input reader and OpenDeck re-registration), so it no longer
+  gets stuck in its default mode requiring a USB replug or an OpenDeck restart
+- `just`: allow overriding the docker command (`just docker="sudo docker" package`) for the
+  macOS cross-build
+
 ## [0.1.0] - 2026-06-08
 
 Initial release.
