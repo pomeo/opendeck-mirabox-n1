@@ -2,7 +2,7 @@ use data_url::DataUrl;
 use image::load_from_memory_with_format;
 use mirajazz::{device::Device, error::MirajazzError, state::DeviceStateUpdate};
 use openaction::{OUTBOUND_EVENT_MANAGER, SetImageEvent};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -10,68 +10,113 @@ use crate::{
     mappings::{COL_COUNT, CandidateDevice, ENCODER_COUNT, KEY_COUNT, Kind, ROW_COUNT},
 };
 
-/// Initializes a device and listens for events
+/// Keep-alive loop period.
+const KEEPALIVE_PERIOD: Duration = Duration::from_secs(2);
+
+/// If the real-time gap between two ticks exceeds this, we assume the host was suspended (the
+/// monotonic timer driving the loop is frozen during sleep while the system clock keeps real
+/// time) and fully reconnect the device, which the N1 firmware needs after a resume.
+const RESUME_GAP: Duration = Duration::from_secs(30);
+
+/// Connects to a device and runs the init sequence that switches it into image mode.
+async fn connect_and_init(candidate: &CandidateDevice) -> Result<Device, MirajazzError> {
+    let device = connect(candidate).await?;
+
+    // Initialize first (set_brightness triggers it), then switch the device into its image
+    // mode — doing it in this order keeps the init sequence from undoing the mode switch.
+    device.set_brightness(50).await?;
+    if let Some(mode) = candidate.kind.mode() {
+        device.set_mode(mode).await?;
+    }
+    device.clear_all_button_images().await?;
+    device.flush().await?;
+
+    Ok(device)
+}
+
+/// Resolves once a resume-from-suspend is detected: a wall-clock gap between ticks far larger
+/// than the polling period (the monotonic timer is frozen while the host sleeps).
+async fn wait_for_resume() {
+    let mut last_tick = SystemTime::now();
+
+    loop {
+        tokio::time::sleep(KEEPALIVE_PERIOD).await;
+
+        let now = SystemTime::now();
+        let elapsed = now.duration_since(last_tick).unwrap_or(Duration::ZERO);
+        last_tick = now;
+
+        if elapsed >= RESUME_GAP {
+            return;
+        }
+    }
+}
+
+/// Initializes a device and listens for events, fully reconnecting after a resume from suspend.
 pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
     log::info!("Running device task for {:?}", candidate);
 
-    // Wrap in a closure so we can use `?` operator
-    let device = async || -> Result<Device, MirajazzError> {
-        let device = connect(&candidate).await?;
+    loop {
+        let device = match connect_and_init(&candidate).await {
+            Ok(device) => device,
+            Err(err) => {
+                handle_error(&candidate.id, err).await;
 
-        // Initialize first (set_brightness triggers it), then switch the device into its image
-        // mode — doing it in this order keeps the init sequence from undoing the mode switch.
-        device.set_brightness(50).await?;
-        if let Some(mode) = candidate.kind.mode() {
-            device.set_mode(mode).await?;
+                log::error!(
+                    "Had error during device init, finishing device task: {:?}",
+                    candidate
+                );
+
+                return;
+            }
+        };
+
+        log::info!("Registering device {}", candidate.id);
+        if let Some(outbound) = OUTBOUND_EVENT_MANAGER.lock().await.as_mut() {
+            outbound
+                .register_device(
+                    candidate.id.clone(),
+                    candidate.kind.human_name(),
+                    ROW_COUNT as u8,
+                    COL_COUNT as u8,
+                    ENCODER_COUNT as u8,
+                    0,
+                )
+                .await
+                .unwrap();
         }
-        device.clear_all_button_images().await?;
-        device.flush().await?;
 
-        Ok(device)
-    }()
-    .await;
+        DEVICES.write().await.insert(candidate.id.clone(), device);
 
-    let device: Device = match device {
-        Ok(device) => device,
-        Err(err) => {
-            handle_error(&candidate.id, err).await;
+        // After a resume the N1 firmware is back in its default mode and won't deliver input over
+        // the existing handle, so we tear everything down and reconnect from scratch — an in-place
+        // re-init leaves the stale reader and the firmware's default screen in place.
+        let resumed = tokio::select! {
+            _ = device_events_task(&candidate) => false,
+            _ = device_keepalive_task(&candidate.id, token.clone()) => false,
+            _ = wait_for_resume() => true,
+            _ = token.cancelled() => false,
+        };
 
-            log::error!(
-                "Had error during device init, finishing device task: {:?}",
-                candidate
-            );
+        log::info!("Shutting down device {:?}", candidate);
 
-            return;
+        if let Some(device) = DEVICES.write().await.remove(&candidate.id) {
+            device.shutdown().await.ok();
         }
-    };
 
-    log::info!("Registering device {}", candidate.id);
-    if let Some(outbound) = OUTBOUND_EVENT_MANAGER.lock().await.as_mut() {
-        outbound
-            .register_device(
-                candidate.id.clone(),
-                candidate.kind.human_name(),
-                ROW_COUNT as u8,
-                COL_COUNT as u8,
-                ENCODER_COUNT as u8,
-                0,
-            )
-            .await
-            .unwrap();
-    }
+        if resumed && !token.is_cancelled() {
+            log::info!("Resumed from suspend, reconnecting device {}", candidate.id);
 
-    DEVICES.write().await.insert(candidate.id.clone(), device);
+            // Drop OpenDeck's registration so it re-registers and repaints (clearing the firmware's
+            // default screen) once we reconnect on the next loop iteration.
+            if let Some(outbound) = OUTBOUND_EVENT_MANAGER.lock().await.as_mut() {
+                outbound.deregister_device(candidate.id.clone()).await.ok();
+            }
 
-    tokio::select! {
-        _ = device_events_task(&candidate) => {},
-        _ = device_keepalive_task(&candidate.id, token.clone()) => {},
-        _ = token.cancelled() => {}
-    };
+            continue;
+        }
 
-    log::info!("Shutting down device {:?}", candidate);
-
-    if let Some(device) = DEVICES.read().await.get(&candidate.id) {
-        device.shutdown().await.ok();
+        break;
     }
 
     log::info!("Device task finished for {:?}", candidate);
@@ -82,7 +127,7 @@ pub async fn device_task(candidate: CandidateDevice, token: CancellationToken) {
 async fn device_keepalive_task(id: &String, token: CancellationToken) {
     loop {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+            _ = tokio::time::sleep(KEEPALIVE_PERIOD) => {}
             _ = token.cancelled() => return,
         }
 
